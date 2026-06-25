@@ -13,6 +13,7 @@ from schemas import CategorizeRequest, SyncSummary
 
 GSA_ENDPOINT = "https://api.gsa.gov/assets/gsaauctions/v2/auctions"
 GSA_AUCTIONS_WEB_ENDPOINT = "https://www.ppms.gov/gw/auction/ppms/api/v1/auctions"
+GSA_STORAGE_PRESIGNED_ENDPOINT = "https://www.ppms.gov/gw/common/ppms/api/v1/storage/presigned-urls"
 GSA_LAB_EQUIPMENT_CATEGORY_CODE = "140"
 
 
@@ -26,6 +27,7 @@ def sync_gsa_auctions(conn) -> SyncSummary:
 
     try:
         listings = _fetch_gsa_lab_equipment_category()
+        _attach_gsa_presigned_image_urls(listings)
         summary.total_listings_retrieved = len(listings)
     except Exception as exc:
         summary.sync_completed_at = datetime.utcnow()
@@ -112,6 +114,59 @@ def _fetch_gsa_lab_equipment_category() -> list[dict[str, Any]]:
     return listings if isinstance(listings, list) else []
 
 
+def _attach_gsa_presigned_image_urls(listings: list[dict[str, Any]]) -> None:
+    image_requests = []
+    for raw in listings:
+        uri = _string(_field(raw, "uri", "ImageURL", "imageURL"))
+        auction_id = _string(_field(raw, "auctionId", "AuctionId"))
+        lot_name = _string(_field(raw, "lotName", "ItemName", "itemName")) or "auction-image"
+        if not uri or not auction_id:
+            continue
+        image_requests.append(
+            {
+                "id": auction_id,
+                "uri": uri,
+                "fileName": _safe_gsa_file_name(lot_name),
+            }
+        )
+
+    if not image_requests:
+        return
+
+    request = urllib.request.Request(
+        GSA_STORAGE_PRESIGNED_ENDPOINT,
+        data=json.dumps(image_requests).encode("utf-8"),
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Origin": "https://www.gsaauctions.gov",
+            "Referer": "https://www.gsaauctions.gov/auctions/auctions-list?categoryCodes=140&status=active&advanced=false&auctionHome=true",
+            "User-Agent": "Mozilla/5.0",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return
+
+    if not isinstance(payload, list):
+        return
+
+    presigned_by_id = {
+        _string(item.get("id")): _string(item.get("presignedUrl"))
+        for item in payload
+        if isinstance(item, dict)
+    }
+    for raw in listings:
+        auction_id = _string(_field(raw, "auctionId", "AuctionId"))
+        presigned_url = presigned_by_id.get(auction_id)
+        if presigned_url:
+            raw["preSignedURL"] = presigned_url
+
+
 def normalize_gsa_listing(raw: dict[str, Any], synced_at: str) -> dict[str, Any]:
     sale_no = _string(_field(raw, "SaleNo", "saleNo", "salesNumber"))
     lot_no = _string(_field(raw, "LotNo", "lotNo", "lotNumber"))
@@ -186,7 +241,7 @@ def normalize_gsa_listing(raw: dict[str, Any], synced_at: str) -> dict[str, Any]
         "inspection_instruction_1": _string(_field(raw, "Instruction1", "instruction1", "instruction")),
         "inspection_instruction_2": _string(_field(raw, "Instruction2", "instruction2")),
         "inspection_instruction_3": _string(_field(raw, "Instruction3", "instruction3")),
-        "image_url": _image_url(_field(raw, "ImageURL", "imageURL", "uri")),
+        "image_url": _image_url(_field(raw, "preSignedURL", "presignedUrl", "ImageURL", "imageURL", "uri")),
         "recommended_tags": json.dumps(enrichment.recommended_tags),
         "buyer_use_cases": json.dumps(enrichment.buyer_use_cases),
         "risk_notes": json.dumps(enrichment.risk_notes),
@@ -264,6 +319,11 @@ def _image_url(value: Any) -> str | None:
     if text.startswith(("http://", "https://")):
         return text
     return f"https://www.gsaauctions.gov/{text.lstrip('/')}"
+
+
+def _safe_gsa_file_name(value: str) -> str:
+    safe = "".join(character for character in value if character.isalnum() or character == " ")
+    return safe.strip() or "auction-image"
 
 
 def _float(value: Any) -> float | None:

@@ -395,15 +395,7 @@ function ListingCard({ listing, onSelect }) {
 
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="aspect-[16/9] bg-slate-100">
-        {listing.image_url ? (
-          <img src={listing.image_url} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-slate-400">
-            <Microscope size={42} />
-          </div>
-        )}
-      </div>
+      <AuctionImage listing={listing} className="aspect-[16/9]" />
       <div className="p-5">
         <div className="flex flex-wrap gap-2">
           <Badge>GSA Auction</Badge>
@@ -588,9 +580,7 @@ function EquipmentModal({ listing, onClose }) {
         </div>
         <div className="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
-            <div className="aspect-[16/10] rounded-2xl bg-slate-100">
-              {listing.image_url ? <img src={listing.image_url} alt="" className="h-full w-full rounded-2xl object-cover" /> : <div className="flex h-full items-center justify-center text-slate-400"><Microscope size={54} /></div>}
-            </div>
+            <AuctionImage listing={listing} className="aspect-[16/10] rounded-2xl" />
             <div className="mt-4 grid grid-cols-2 gap-3">
               <Metric label="Current bid" value={money(listing.current_bid)} />
               <Metric label="Bidders" value={listing.bidders_count ?? "N/A"} />
@@ -614,6 +604,59 @@ function EquipmentModal({ listing, onClose }) {
         </div>
         <div className="mt-6"><Notice tone="warning">{DISCLAIMER}</Notice></div>
       </div>
+    </div>
+  );
+}
+
+function AuctionImage({ listing, className = "" }) {
+  const [imageStatus, setImageStatus] = useState(listing.image_url ? "loading" : "fallback");
+  const title = listing.cleaned_title || listing.title || "Lab equipment";
+  const category = listing.category || "Lab equipment";
+
+  return (
+    <div className={`relative overflow-hidden bg-slate-100 ${className}`}>
+      {listing.image_url && imageStatus !== "fallback" && (
+        <img
+          src={listing.image_url}
+          alt={title}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className={`h-full w-full object-cover transition duration-300 ${
+            imageStatus === "loaded" ? "opacity-100" : "opacity-0"
+          }`}
+          onLoad={(event) => {
+            if (event.currentTarget.naturalWidth > 1) {
+              setImageStatus("loaded");
+            } else {
+              setImageStatus("fallback");
+            }
+          }}
+          onError={() => setImageStatus("fallback")}
+        />
+      )}
+      {imageStatus !== "loaded" && (
+        <div className="absolute inset-0 flex flex-col justify-between bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_30%),linear-gradient(135deg,#f8fafc,#eaf2ff)] p-5">
+          <div className="flex items-center justify-between">
+            <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-black uppercase tracking-wide text-slate-700">
+              {category}
+            </span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/85 text-emerald-700 shadow-sm">
+              <Microscope size={22} />
+            </span>
+          </div>
+          <div>
+            <div className="mb-4 grid grid-cols-5 gap-2 opacity-80">
+              {[0, 1, 2, 3, 4].map((item) => (
+                <span key={item} className="h-1.5 rounded-full bg-blue-600/50" />
+              ))}
+            </div>
+            <p className="max-w-sm text-lg font-black leading-6 text-slate-950">{title}</p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {imageStatus === "loading" ? "Loading GSA auction image" : "GSA listing image unavailable"}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
