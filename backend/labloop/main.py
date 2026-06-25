@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -121,14 +121,14 @@ def list_listings(
         clauses.append("equipment_confidence_score >= ?")
         params.append(min_confidence)
     if ending_soon or sort != "newest_synced":
-        today = date.today()
-        one_week_from_today = today + timedelta(days=7)
-        clauses.append("auction_end_date >= ?")
-        clauses.append("auction_end_date <= ?")
-        params.extend([today.isoformat(), one_week_from_today.isoformat()])
+        now = datetime.utcnow().replace(microsecond=0)
+        one_week_from_now = now + timedelta(days=7)
+        clauses.append("datetime(auction_end_date) >= datetime(?)")
+        clauses.append("datetime(auction_end_date) <= datetime(?)")
+        params.extend([now.isoformat(), one_week_from_now.isoformat()])
 
     sort_map = {
-        "ending_soonest": "auction_end_date ASC",
+        "ending_soonest": "datetime(auction_end_date) ASC",
         "newest_synced": "last_synced_at DESC",
         "highest_relevance": "scientific_relevance_score DESC",
         "lowest_current_bid": "current_bid ASC",

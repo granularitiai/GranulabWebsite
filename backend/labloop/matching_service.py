@@ -96,10 +96,17 @@ def _json_list(value: str) -> list[str]:
 def _ending_soon(value: str | None) -> bool:
     if not value:
         return False
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y-%m-%dT%H:%M:%S"):
+    for parser in (
+        lambda text: datetime.fromisoformat(text.replace("Z", "+00:00")),
+        lambda text: datetime.strptime(text[:10], "%Y-%m-%d"),
+        lambda text: datetime.strptime(text[:10], "%m/%d/%Y"),
+    ):
         try:
-            delta = datetime.strptime(value[:19], fmt) - datetime.utcnow()
-            return 0 <= delta.days <= 7
+            parsed = parser(value[:19])
+            if parsed.tzinfo is not None:
+                parsed = parsed.replace(tzinfo=None)
+            seconds_until_end = (parsed - datetime.utcnow()).total_seconds()
+            return 0 <= seconds_until_end <= 7 * 24 * 60 * 60
         except ValueError:
             continue
     return False

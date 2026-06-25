@@ -4,7 +4,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from ai_service import categorize_equipment, is_scientific_listing
@@ -219,8 +219,8 @@ def normalize_gsa_listing(raw: dict[str, Any], synced_at: str) -> dict[str, Any]
         "sale_number": sale_no,
         "lot_number": lot_no,
         "auction_status": _string(_field(raw, "AuctionStatus", "auctionStatus", "status")),
-        "auction_start_date": _date_string(_field(raw, "AucStartDt", "aucStartDt", "startDate")),
-        "auction_end_date": _date_string(_field(raw, "AucEndDt", "aucEndDt", "endDate")),
+        "auction_start_date": _datetime_string(_field(raw, "AucStartDt", "aucStartDt", "startDate")),
+        "auction_end_date": _datetime_string(_field(raw, "AucEndDt", "aucEndDt", "endDate")),
         "agency_code": _string(_field(raw, "AgencyCode", "agencyCode")),
         "bureau_code": _string(_field(raw, "BureauCode", "bureauCode")),
         "agency_name": _string(_field(raw, "AgencyName", "agencyName", "sellingAgency")),
@@ -305,11 +305,22 @@ def _string(value: Any) -> str | None:
     return text or None
 
 
-def _date_string(value: Any) -> str | None:
+def _datetime_string(value: Any) -> str | None:
     text = _string(value)
     if not text:
         return None
-    return text[:10]
+    normalized = text.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed.replace(microsecond=0).isoformat()
+    except ValueError:
+        if len(text) >= 19:
+            return text[:19]
+        if len(text) >= 10:
+            return f"{text[:10]}T00:00:00"
+        return text
 
 
 def _image_url(value: Any) -> str | None:
