@@ -1,5 +1,27 @@
 services:
   - type: web
+    name: granulariti-protocol-intelligence-api
+    runtime: python
+    plan: free
+    region: ohio
+    rootDir: backend/protocol-intelligence
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_TIMEOUT_SECONDS
+        value: "180"
+      - key: CORS_ORIGINS
+        value: https://granularitiwebsite.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+
+  - type: web
     name: granulariti-labloop-api
     runtime: python
     plan: free
