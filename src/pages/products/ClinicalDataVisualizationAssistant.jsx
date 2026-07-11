@@ -231,6 +231,8 @@ export default function ClinicalDataVisualizationAssistant() {
             <GeneratedVisualizations
               analysis={analysis}
               aiAnalysis={aiAnalysis}
+              aiError={aiError}
+              isAnalyzing={isAnalyzing}
               rows={rows}
             />
             <QualityFindings
@@ -497,8 +499,9 @@ function Recommendations({ recommendations, aiAnalysis }) {
   );
 }
 
-function GeneratedVisualizations({ analysis, aiAnalysis, rows }) {
+function GeneratedVisualizations({ analysis, aiAnalysis, aiError, isAnalyzing, rows }) {
   const modelCharts = aiAnalysis?.chartSpecs || [];
+  const shouldShowFallback = !isAnalyzing && !modelCharts.length && aiError;
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
       <SectionTitle
@@ -507,19 +510,46 @@ function GeneratedVisualizations({ analysis, aiAnalysis, rows }) {
         subtitle={
           modelCharts.length
             ? "Recharts visualizations generated from GPT-selected chart specs."
-            : "Fast browser-rendered fallback previews for exploratory review."
+            : isAnalyzing
+              ? "GPT is selecting the best chart types, X variables, and Y variables for this dataset."
+              : "Fallback previews are available because GPT visualization generation did not complete."
         }
       />
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        {modelCharts.length
-          ? modelCharts.map((spec) => (
-              <ModelChartCard key={spec.id || spec.title} spec={spec} rows={rows} />
-            ))
-          : analysis.charts.map((chart) => (
-              <ChartCard key={chart.title} chart={chart} />
-            ))}
-      </div>
+      {isAnalyzing && !modelCharts.length ? (
+        <VisualizationLoadingBar />
+      ) : (
+        <div className="mt-5 grid gap-5 lg:grid-cols-3">
+          {modelCharts.length
+            ? modelCharts.map((spec) => (
+                <ModelChartCard key={spec.id || spec.title} spec={spec} rows={rows} />
+              ))
+            : shouldShowFallback
+              ? analysis.charts.map((chart) => (
+                  <ChartCard key={chart.title} chart={chart} />
+                ))
+              : null}
+        </div>
+      )}
     </section>
+  );
+}
+
+function VisualizationLoadingBar() {
+  return (
+    <div className="mt-5 rounded-2xl border border-electric/20 bg-ink/60 p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-white">Generating visualizations</p>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            GPT is ranking insight columns and preparing Recharts chart specs.
+          </p>
+        </div>
+        <Sparkles className="shrink-0 text-electric" size={24} />
+      </div>
+      <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full w-1/2 animate-[visualization-progress_1.5s_ease-in-out_infinite] rounded-full bg-electric shadow-glow" />
+      </div>
+    </div>
   );
 }
 

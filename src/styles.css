@@ -60,3 +60,15 @@ a {
 .product-light-surface pre {
   color: #fff;
 }
+
+@keyframes visualization-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  50% {
+    transform: translateX(45%);
+  }
+  100% {
+    transform: translateX(210%);
+  }
+}
