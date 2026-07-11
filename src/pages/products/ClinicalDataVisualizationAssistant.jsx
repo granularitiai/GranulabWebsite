@@ -725,9 +725,9 @@ function ModelChartCard({ spec, rows }) {
         </span>
       </div>
       <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        X: {spec.x}
-        {spec.y ? ` | Y: ${spec.y}` : ""}
-        {spec.color ? ` | Color: ${spec.color}` : ""}
+        X: {formatFieldName(spec.x)}
+        {spec.y ? ` | Y: ${formatFieldName(spec.y)}` : ""}
+        {spec.color ? ` | Group: ${formatFieldName(spec.color)}` : ""}
       </p>
       <div className="mt-4 h-64 rounded-xl border border-white/10 bg-white/[0.03] p-3">
         {chartData.length ? (
@@ -748,6 +748,7 @@ function ModelChartCard({ spec, rows }) {
 
 function renderRechart(spec, data) {
   const yKey = spec.y || "value";
+  const seriesKeys = getSeriesKeys(data, spec);
   if (spec.chartType === "line") {
     return (
       <RechartsLineChart data={data}>
@@ -756,7 +757,9 @@ function renderRechart(spec, data) {
         <YAxis stroke="#94a3b8" tick={{ fontSize: 11 }} />
         <Tooltip contentStyle={tooltipStyle} />
         <Legend />
-        <Line type="monotone" dataKey={yKey} stroke="#32a9ff" strokeWidth={2} dot={false} />
+        {(seriesKeys.length ? seriesKeys : [yKey]).map((key, index) => (
+          <Line key={key} type="monotone" dataKey={key} name={key} stroke={chartColors[index % chartColors.length]} strokeWidth={2} dot={false} connectNulls />
+        ))}
       </RechartsLineChart>
     );
   }
@@ -767,7 +770,10 @@ function renderRechart(spec, data) {
         <XAxis dataKey="x" stroke="#94a3b8" tick={{ fontSize: 11 }} />
         <YAxis stroke="#94a3b8" tick={{ fontSize: 11 }} />
         <Tooltip contentStyle={tooltipStyle} />
-        <Area type="monotone" dataKey={yKey} stroke="#32a9ff" fill="#32a9ff" fillOpacity={0.25} />
+        <Legend />
+        {(seriesKeys.length ? seriesKeys : [yKey]).map((key, index) => (
+          <Area key={key} type="monotone" dataKey={key} name={key} stroke={chartColors[index % chartColors.length]} fill={chartColors[index % chartColors.length]} fillOpacity={0.2} connectNulls />
+        ))}
       </AreaChart>
     );
   }
@@ -778,7 +784,10 @@ function renderRechart(spec, data) {
         <XAxis dataKey="x" name={spec.x} stroke="#94a3b8" tick={{ fontSize: 11 }} />
         <YAxis dataKey={yKey} name={spec.y || "value"} stroke="#94a3b8" tick={{ fontSize: 11 }} />
         <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={tooltipStyle} />
-        <Scatter data={data} fill="#32a9ff" />
+        {seriesKeys.length ? seriesKeys.map((key, index) => (
+          <Scatter key={key} name={key} data={data.filter((row) => row.__series === key)} fill={chartColors[index % chartColors.length]} />
+        )) : <Scatter data={data} fill="#32a9ff" />}
+        {seriesKeys.length > 0 && <Legend />}
       </ScatterChart>
     );
   }
@@ -801,7 +810,10 @@ function renderRechart(spec, data) {
       <XAxis dataKey="x" stroke="#94a3b8" tick={{ fontSize: 11 }} />
       <YAxis stroke="#94a3b8" tick={{ fontSize: 11 }} />
       <Tooltip contentStyle={tooltipStyle} />
-      <Bar dataKey={yKey} fill="#32a9ff" radius={[6, 6, 0, 0]} />
+      {seriesKeys.length > 0 && <Legend />}
+      {(seriesKeys.length ? seriesKeys : [yKey]).map((key, index) => (
+        <Bar key={key} dataKey={key} name={key} fill={chartColors[index % chartColors.length]} radius={[6, 6, 0, 0]} />
+      ))}
     </BarChart>
   );
 }
@@ -1226,6 +1238,7 @@ function buildModelChartData(rows, spec) {
       .map((row) => ({
         x: Number(row[spec.x]),
         [spec.y]: Number(row[spec.y]),
+        __series: spec.color ? formatCategoryValue(spec.color, row[spec.color]) : null,
       }))
       .filter((row) => Number.isFinite(row.x) && Number.isFinite(row[spec.y]))
       .slice(0, 150);
@@ -1233,8 +1246,9 @@ function buildModelChartData(rows, spec) {
   if (spec.aggregation === "none" && spec.y) {
     return rows
       .map((row) => ({
-        x: normalizeCell(row[spec.x]) || "Missing",
+        x: formatCategoryValue(spec.x, row[spec.x]),
         [spec.y]: Number(row[spec.y]),
+        __series: spec.color ? formatCategoryValue(spec.color, row[spec.color]) : null,
       }))
       .filter((row) => Number.isFinite(row[spec.y]))
       .slice(0, 80)
@@ -1242,23 +1256,67 @@ function buildModelChartData(rows, spec) {
   }
   const grouped = new Map();
   rows.forEach((row) => {
-    const x = normalizeCell(row[spec.x]) || "Missing";
+    const x = formatCategoryValue(spec.x, row[spec.x]);
+    const series = spec.color ? formatCategoryValue(spec.color, row[spec.color]) : null;
+    const groupKey = series ? `${x}\u0000${series}` : x;
     const value = spec.y ? Number(row[spec.y]) : null;
-    if (!grouped.has(x)) grouped.set(x, []);
+    if (!grouped.has(groupKey)) grouped.set(groupKey, { x, series, values: [] });
     if (spec.aggregation === "count" || !spec.y) {
-      grouped.get(x).push(1);
+      grouped.get(groupKey).values.push(1);
     } else if (Number.isFinite(value)) {
-      grouped.get(x).push(value);
+      grouped.get(groupKey).values.push(value);
     }
   });
-  return [...grouped.entries()]
-    .map(([x, values]) => ({
-      x,
-      [spec.y || "value"]: aggregate(values, spec.aggregation),
-      value: aggregate(values, spec.aggregation),
-    }))
+  const pivoted = new Map();
+  grouped.forEach(({ x, series, values }) => {
+    const value = aggregate(values, spec.aggregation);
+    if (!pivoted.has(x)) pivoted.set(x, { x });
+    const item = pivoted.get(x);
+    if (series) item[series] = value;
+    else {
+      item[spec.y || "value"] = value;
+      item.value = value;
+    }
+  });
+  return [...pivoted.values()]
     .sort((a, b) => compareX(a.x, b.x))
     .slice(0, 20);
+}
+
+function getSeriesKeys(data, spec) {
+  if (!spec.color) return [];
+  if (spec.chartType === "scatter") {
+    return [...new Set(data.map((row) => row.__series).filter(Boolean))];
+  }
+  return [...new Set(data.flatMap((row) => Object.keys(row)))]
+    .filter((key) => !["x", "value", "__series"].includes(key));
+}
+
+function formatFieldName(name) {
+  return String(name || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatCategoryValue(columnName, rawValue) {
+  const value = normalizeCell(rawValue);
+  if (!value) return "Missing";
+  const column = String(columnName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = value.toLowerCase();
+
+  if (/gender|sex/.test(column)) {
+    if (["m", "male", "1"].includes(normalized)) return "Male";
+    if (["f", "female", "2"].includes(normalized)) return "Female";
+  }
+  if (/smok/.test(column) && ["1", "2"].includes(normalized)) {
+    return normalized === "1" ? "No" : "Yes";
+  }
+  if (/cancer|outcome|status|positive|response|event|dead|death|disease/.test(column)) {
+    if (["0", "no", "n", "false", "negative"].includes(normalized)) return "No";
+    if (["1", "yes", "y", "true", "positive"].includes(normalized)) return "Yes";
+    if (normalized === "2") return "Yes";
+  }
+  return value;
 }
 
 function aggregate(values, aggregation) {
@@ -1315,7 +1373,7 @@ function histogram(values, bins) {
   const max = Math.max(...values);
   const width = max === min ? 1 : (max - min) / bins;
   const counts = Array.from({ length: bins }, (_, index) => ({
-    label: String(index + 1),
+    label: `${round(min + index * width)}-${round(min + (index + 1) * width)}`,
     value: 0,
   }));
   values.forEach((value) => {
