@@ -42,10 +42,13 @@ Current behavior:
 
 - CSV and JSON files are parsed in the browser.
 - Dataset profiling is performed client-side.
-- The browser sends column profiles and capped sample rows to `POST /analyze/clinical-data-visualization`.
+- Uploading a dataset does not generate charts automatically.
+- The user asks a visualization question in natural language after the local profile is ready.
+- The browser sends the question, column profiles, and representative sample rows to `POST /analyze/clinical-data-visualization`.
 - The backend calls OpenAI using `OPENAI_VISUALIZATION_MODEL`, defaulting to `gpt-5.5`.
-- GPT selects insight columns, X/Y variables, chart types, data-quality findings, and interpretation guidance.
-- Generated charts are rendered in React with Recharts.
+- GPT returns one chart plan with the X/Y variables, optional grouping, aggregation, time grain, and cumulative setting required to answer the question.
+- The browser applies the plan to the full uploaded dataset; GPT does not calculate values from the sample rows.
+- The requested chart is rendered in React with Recharts. Cumulative time questions support day, week, month, quarter, and year groupings.
 - Export controls download JSON/CSV artifacts from the browser.
 
 Required backend environment variables:

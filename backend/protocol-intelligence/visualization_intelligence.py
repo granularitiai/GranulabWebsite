@@ -34,7 +34,7 @@ class DatasetVisualizationRequest(BaseModel):
     columnCount: int = Field(ge=0)
     columns: list[ColumnProfile]
     sampleRows: list[dict[str, Any]] = Field(default_factory=list, max_length=80)
-    userGoal: str | None = None
+    userGoal: str = Field(min_length=3, max_length=1000)
 
 
 class InsightColumn(BaseModel):
@@ -52,6 +52,8 @@ class ChartSpec(BaseModel):
     y: str | None = None
     color: str | None = None
     aggregation: Literal["count", "mean", "median", "sum", "min", "max", "none"] = "none"
+    cumulative: bool = False
+    timeGrain: Literal["none", "day", "week", "month", "quarter", "year"] = "none"
     rationale: str
     insight: str
 
@@ -66,32 +68,37 @@ class DatasetVisualizationResponse(BaseModel):
     model: str
     analysisSummary: str
     insightColumns: list[InsightColumn]
-    chartSpecs: list[ChartSpec]
+    chartSpecs: list[ChartSpec] = Field(max_length=1)
     dataQualityFindings: list[VisualizationFinding]
     followUpQuestions: list[str] = Field(default_factory=list)
 
 
 SYSTEM_PROMPT = """
 You are Granulariti's Clinical Data Visualization Assistant.
-Analyze clinical trial, laboratory, biomarker, and biotech datasets for exploratory visualization.
+Translate a user's natural-language analytical question into one scientifically appropriate chart.
 
 Return strict JSON only. Do not include markdown.
 
 Your job:
-1. Understand the dataset from column profiles and representative sample rows.
-2. Identify which columns offer the most scientific or operational insight.
-3. Choose X and Y variables and optional color/facet groupings for charting.
-4. Decide the best chart types for the data.
-5. Flag data-quality issues that affect visualization or interpretation.
+1. Interpret the user's question in the context of the supplied dataset schema and sample rows.
+2. Select only existing columns needed to answer that question.
+3. Choose the best chart type, X/Y variables, optional color grouping, aggregation, and time grain.
+4. Set cumulative=true only when the user asks for accumulation, running total, growth-to-date, or a cumulative measure.
+5. Explain what the resulting chart answers and flag any ambiguity or data-quality limitation.
 
 Rules:
 - Be practical and scientifically grounded.
 - Prefer clinically meaningful comparisons: treatment arm, visit, site, cohort, biomarker, endpoint, response, adverse event, time/date, enrollment, lab value.
 - Do not invent columns that are not present.
 - If a chart needs y but no numeric column exists, use aggregation "count" and y null.
-- Keep chartSpecs to 3-5 items.
+- Return exactly one chartSpec that best answers the user's request.
+- Do not generate a chart when the request cannot be answered from the available columns; return an empty chartSpecs list and ask a specific follow-up question.
 - Use chartType only from: bar, line, scatter, area, histogram, pie.
 - Use aggregation only from: count, mean, median, sum, min, max, none.
+- For cumulative values over time, normally use line or area, aggregation sum, cumulative true, and an appropriate timeGrain.
+- Use line or area for trends over ordered time, bar for categorical comparisons, scatter for relationships between numeric variables, histogram for one numeric distribution, and pie only for a small part-to-whole comparison.
+- Preserve exact column names in x, y, and color.
+- The browser, not the model, performs calculations over the full dataset. Never invent computed values.
 - Outputs are exploratory and require human review.
 """
 
@@ -129,6 +136,8 @@ def analyze_visualization_dataset(
                     "y": "existing column name or null",
                     "color": "existing column name or null",
                     "aggregation": "count|mean|median|sum|min|max|none",
+                    "cumulative": "true only for a running total",
+                    "timeGrain": "none|day|week|month|quarter|year",
                     "rationale": "why this chart is suitable",
                     "insight": "what to look for",
                 }

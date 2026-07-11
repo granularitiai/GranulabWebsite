@@ -71,6 +71,8 @@ export default function ClinicalDataVisualizationAssistant() {
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiError, setAiError] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
 
   const analysis = useMemo(() => analyzeDataset(rows, columns), [rows, columns]);
   const hasData = rows.length > 0;
@@ -81,13 +83,13 @@ export default function ClinicalDataVisualizationAssistant() {
     try {
       const text = await file.text();
       const parsed = parseDataset(file.name, text);
-      const localAnalysis = analyzeDataset(parsed.rows, parsed.columns);
       setFileName(file.name);
       setRows(parsed.rows);
       setColumns(parsed.columns);
       setAiAnalysis(null);
       setAiError(null);
-      await requestModelAnalysis(file.name, parsed, localAnalysis);
+      setQuestion("");
+      setSubmittedQuestion("");
     } catch (err) {
       setRows([]);
       setColumns([]);
@@ -98,8 +100,14 @@ export default function ClinicalDataVisualizationAssistant() {
     }
   }
 
-  async function requestModelAnalysis(name, parsed, localAnalysis) {
+  async function requestChart(event) {
+    event.preventDefault();
+    const userGoal = question.trim();
+    if (!userGoal || !hasData || isAnalyzing) return;
     setIsAnalyzing(true);
+    setAiError(null);
+    setAiAnalysis(null);
+    setSubmittedQuestion(userGoal);
     try {
       const response = await fetch(
         `${API_BASE_URL}/analyze/clinical-data-visualization`,
@@ -107,11 +115,12 @@ export default function ClinicalDataVisualizationAssistant() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            fileName: name,
-            rowCount: parsed.rows.length,
-            columnCount: parsed.columns.length,
-            columns: localAnalysis.columnProfiles,
-            sampleRows: parsed.rows.slice(0, 50),
+            fileName,
+            rowCount: rows.length,
+            columnCount: columns.length,
+            columns: analysis.columnProfiles,
+            sampleRows: selectRepresentativeRows(rows, 50),
+            userGoal,
           }),
         },
       );
@@ -121,7 +130,7 @@ export default function ClinicalDataVisualizationAssistant() {
       setAiError(
         err instanceof Error
           ? err.message
-          : "AI visualization analysis failed. Local profiling is still available.",
+          : "GPT could not translate that request into a visualization.",
       );
     } finally {
       setIsAnalyzing(false);
@@ -136,6 +145,8 @@ export default function ClinicalDataVisualizationAssistant() {
     setAiAnalysis(null);
     setAiError(null);
     setIsAnalyzing(false);
+    setQuestion("");
+    setSubmittedQuestion("");
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -153,8 +164,8 @@ export default function ClinicalDataVisualizationAssistant() {
             </h1>
             <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
               Upload clinical trial, laboratory, biomarker, or biotech datasets and
-              receive scientifically relevant visualizations, data-quality checks,
-              and AI-assisted analysis recommendations.
+              ask questions in natural language. GPT converts each request into a
+              scientifically relevant visualization calculated from your data.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button
@@ -217,23 +228,25 @@ export default function ClinicalDataVisualizationAssistant() {
 
         {hasData ? (
           <div className="mt-8 space-y-6">
+            <DatasetProfile analysis={analysis} fileName={fileName} />
+            <ChartQuestionComposer
+              question={question}
+              setQuestion={setQuestion}
+              onSubmit={requestChart}
+              isAnalyzing={isAnalyzing}
+            />
             <ModelStatus
               aiAnalysis={aiAnalysis}
               aiError={aiError}
               isAnalyzing={isAnalyzing}
-            />
-            <DatasetProfile analysis={analysis} fileName={fileName} />
-            <InsightColumns aiAnalysis={aiAnalysis} />
-            <Recommendations
-              recommendations={analysis.recommendations}
-              aiAnalysis={aiAnalysis}
+              submittedQuestion={submittedQuestion}
             />
             <GeneratedVisualizations
-              analysis={analysis}
               aiAnalysis={aiAnalysis}
               aiError={aiError}
               isAnalyzing={isAnalyzing}
               rows={rows}
+              submittedQuestion={submittedQuestion}
             />
             <QualityFindings
               findings={analysis.qualityFindings}
@@ -283,7 +296,7 @@ function UploadPanel({ inputRef, fileName, hasData, error, onFile }) {
         </span>
         <span className="mt-2 max-w-md text-sm leading-6 text-slate-400">
           Upload CSV or JSON data to profile fields, identify quality risks, and
-          generate visualization recommendations.
+          prepare the dataset for your natural-language chart requests.
         </span>
       </button>
 
@@ -389,21 +402,77 @@ function DatasetProfile({ analysis, fileName }) {
   );
 }
 
-function ModelStatus({ aiAnalysis, aiError, isAnalyzing }) {
+function ChartQuestionComposer({ question, setQuestion, onSubmit, isAnalyzing }) {
+  const examples = [
+    "How has enrollment accumulated over time?",
+    "Compare the mean biomarker value by treatment arm",
+    "Show the relationship between age and response by gender",
+  ];
+
+  return (
+    <section className="rounded-2xl border border-electric/25 bg-midnight/70 p-5 shadow-glow">
+      <SectionTitle
+        icon={Sparkles}
+        title="Ask Your Data"
+        subtitle="Describe the result you need. GPT will select the variables, calculation, grouping, and chart type."
+      />
+      <form className="mt-5" onSubmit={onSubmit}>
+        <label htmlFor="chart-question" className="text-sm font-bold text-white">
+          What would you like to visualize?
+        </label>
+        <div className="mt-2 rounded-2xl border border-white/15 bg-ink/80 p-3 focus-within:border-electric focus-within:ring-2 focus-within:ring-electric/20">
+          <textarea
+            id="chart-question"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            rows={3}
+            maxLength={1000}
+            placeholder="Example: How much has enrollment accumulated each month over the study period?"
+            className="w-full resize-y bg-transparent px-2 py-1 text-base leading-7 text-white placeholder:text-slate-500 focus:outline-none"
+          />
+          <div className="mt-2 flex justify-end border-t border-white/10 pt-3">
+            <button
+              type="submit"
+              disabled={!question.trim() || isAnalyzing}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-electric px-5 py-2.5 text-sm font-bold text-ink transition hover:-translate-y-0.5 hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+            >
+              <Sparkles size={17} />
+              {isAnalyzing ? "Generating..." : "Generate Chart"}
+            </button>
+          </div>
+        </div>
+      </form>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {examples.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => setQuestion(example)}
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-semibold text-slate-300 transition hover:border-electric/50 hover:text-white"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ModelStatus({ aiAnalysis, aiError, isAnalyzing, submittedQuestion }) {
   if (!isAnalyzing && !aiError && !aiAnalysis) return null;
   return (
     <section className="rounded-2xl border border-white/10 bg-midnight/70 p-5">
       {isAnalyzing && (
         <div className="flex items-center gap-3 text-sm text-slate-200">
           <Sparkles className="text-electric" size={20} />
-          GPT is analyzing the dataset, ranking insight columns, and selecting chart specs.
+          GPT is interpreting "{submittedQuestion}" and selecting the best chart.
         </div>
       )}
       {aiAnalysis && !isAnalyzing && (
         <div className="flex items-start gap-3 text-sm leading-6 text-slate-200">
           <CheckCircle2 className="mt-0.5 shrink-0 text-electric" size={20} />
           <span>
-            Model analysis complete with <strong>{aiAnalysis.model}</strong>:{" "}
+            Chart plan generated with <strong>{aiAnalysis.model}</strong>:{" "}
             {aiAnalysis.analysisSummary}
           </span>
         </div>
@@ -412,8 +481,7 @@ function ModelStatus({ aiAnalysis, aiError, isAnalyzing }) {
         <div className="flex items-start gap-3 text-sm leading-6 text-amber-50">
           <AlertTriangle className="mt-0.5 shrink-0 text-amber-300" size={20} />
           <span>
-            GPT analysis is unavailable, so the page is showing local fallback
-            profiling. Backend message: {aiError}
+            The chart could not be generated. {aiError}
           </span>
         </div>
       )}
@@ -499,35 +567,51 @@ function Recommendations({ recommendations, aiAnalysis }) {
   );
 }
 
-function GeneratedVisualizations({ analysis, aiAnalysis, aiError, isAnalyzing, rows }) {
+function GeneratedVisualizations({ aiAnalysis, aiError, isAnalyzing, rows, submittedQuestion }) {
   const modelCharts = aiAnalysis?.chartSpecs || [];
-  const shouldShowFallback = !isAnalyzing && !modelCharts.length && aiError;
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
       <SectionTitle
         icon={BarChart3}
-        title="Generated Visualizations"
+        title="Your Visualization"
         subtitle={
           modelCharts.length
-            ? "Recharts visualizations generated from GPT-selected chart specs."
+            ? `Generated for: ${submittedQuestion}`
             : isAnalyzing
-              ? "GPT is selecting the best chart types, X variables, and Y variables for this dataset."
-              : "Fallback previews are available because GPT visualization generation did not complete."
+              ? "GPT is selecting the variables, calculation, grouping, and chart type."
+              : "No chart is generated until you ask a question about the uploaded dataset."
         }
       />
       {isAnalyzing && !modelCharts.length ? (
         <VisualizationLoadingBar />
       ) : (
-        <div className="mt-5 grid gap-5 lg:grid-cols-3">
-          {modelCharts.length
-            ? modelCharts.map((spec) => (
-                <ModelChartCard key={spec.id || spec.title} spec={spec} rows={rows} />
-              ))
-            : shouldShowFallback
-              ? analysis.charts.map((chart) => (
-                  <ChartCard key={chart.title} chart={chart} />
-                ))
-              : null}
+        <div className="mt-5">
+          {modelCharts.length ? (
+            modelCharts.map((spec) => (
+              <ModelChartCard key={spec.id || spec.title} spec={spec} rows={rows} />
+            ))
+          ) : aiAnalysis?.followUpQuestions?.length ? (
+            <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 p-5">
+              <p className="text-sm font-bold text-white">
+                GPT needs more detail before it can build this chart.
+              </p>
+              <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50">
+                {aiAnalysis.followUpQuestions.map((question) => (
+                  <li key={question}>- {question}</li>
+                ))}
+              </ul>
+            </div>
+          ) : !aiError ? (
+            <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-ink/50 px-6 text-center">
+              <BarChart3 className="text-slate-600" size={30} />
+              <p className="mt-3 text-sm font-semibold text-slate-300">
+                Ask a question above to create a chart.
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Nothing is visualized automatically.
+              </p>
+            </div>
+          ) : null}
         </div>
       )}
     </section>
@@ -541,7 +625,7 @@ function VisualizationLoadingBar() {
         <div>
           <p className="text-sm font-bold text-white">Generating visualizations</p>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            GPT is ranking insight columns and preparing Recharts chart specs.
+            GPT is translating your question into an executable chart plan.
           </p>
         </div>
         <Sparkles className="shrink-0 text-electric" size={24} />
@@ -599,7 +683,6 @@ function ExportControls({ analysis, aiAnalysis, rows, fileName }) {
       columns: analysis.columnProfiles,
     },
     modelAnalysis: aiAnalysis,
-    recommendations: analysis.recommendations.map(({ icon, ...item }) => item),
     qualityFindings: analysis.qualityFindings,
   };
 
@@ -662,12 +745,12 @@ function EmptyState() {
     <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.06] p-8 text-center">
       <LineChart className="mx-auto text-electric" size={36} />
       <h2 className="mt-4 text-xl font-bold text-white">
-        Upload a dataset to generate visualization intelligence.
+        Upload a dataset, then ask a question to generate a chart.
       </h2>
       <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-        The assistant will profile fields, infer column types, recommend
-        scientific visualizations, flag data-quality risks, and generate chart
-        previews without replacing expert review.
+        The assistant profiles fields and flags data-quality risks first. Charts
+        are generated only when you describe the analysis you want in natural
+        language.
       </p>
     </section>
   );
@@ -728,8 +811,12 @@ function ModelChartCard({ spec, rows }) {
         X: {formatFieldName(spec.x)}
         {spec.y ? ` | Y: ${formatFieldName(spec.y)}` : ""}
         {spec.color ? ` | Group: ${formatFieldName(spec.color)}` : ""}
+        {spec.aggregation && spec.aggregation !== "none"
+          ? ` | Calculation: ${spec.cumulative ? "cumulative " : ""}${spec.aggregation}`
+          : ""}
+        {spec.timeGrain && spec.timeGrain !== "none" ? ` | Time: ${spec.timeGrain}` : ""}
       </p>
-      <div className="mt-4 h-64 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+      <div className="mt-4 h-80 rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:h-96">
         {chartData.length ? (
           <ResponsiveContainer width="100%" height="100%">
             {renderRechart(spec, chartData)}
@@ -1000,13 +1087,7 @@ function analyzeDataset(rows, columns) {
   const numericColumns = columnProfiles.filter((column) => column.type === "numeric");
   const categoricalColumns = columnProfiles.filter((column) => column.type === "categorical");
   const dateColumns = columnProfiles.filter((column) => column.type === "date");
-  const recommendations = makeRecommendations({
-    numericColumns,
-    categoricalColumns,
-    dateColumns,
-  });
   const qualityFindings = makeQualityFindings(rows, columnProfiles);
-  const charts = makeCharts(rows, { numericColumns, categoricalColumns });
 
   return {
     rowCount: rows.length,
@@ -1015,9 +1096,7 @@ function analyzeDataset(rows, columns) {
     numericColumns,
     categoricalColumns,
     dateColumns,
-    recommendations,
     qualityFindings,
-    charts,
   };
 }
 
@@ -1037,7 +1116,7 @@ function profileColumn(name, rows) {
     ? Math.round(((rows.length - populated.length) / rows.length) * 100)
     : 0;
 
-  let summary = uniqueValues[0] || "No populated values";
+  let summary = uniqueValues.slice(0, 8).join(", ") || "No populated values";
   if (type === "numeric" && numericValues.length) {
     summary = `${formatNumber(Math.min(...numericValues))} to ${formatNumber(
       Math.max(...numericValues),
@@ -1243,10 +1322,10 @@ function buildModelChartData(rows, spec) {
       .filter((row) => Number.isFinite(row.x) && Number.isFinite(row[spec.y]))
       .slice(0, 150);
   }
-  if (spec.aggregation === "none" && spec.y) {
+  if (spec.aggregation === "none" && spec.y && !spec.color) {
     return rows
       .map((row) => ({
-        x: formatCategoryValue(spec.x, row[spec.x]),
+        x: formatChartX(spec, row[spec.x]),
         [spec.y]: Number(row[spec.y]),
         __series: spec.color ? formatCategoryValue(spec.color, row[spec.color]) : null,
       }))
@@ -1256,7 +1335,7 @@ function buildModelChartData(rows, spec) {
   }
   const grouped = new Map();
   rows.forEach((row) => {
-    const x = formatCategoryValue(spec.x, row[spec.x]);
+    const x = formatChartX(spec, row[spec.x]);
     const series = spec.color ? formatCategoryValue(spec.color, row[spec.color]) : null;
     const groupKey = series ? `${x}\u0000${series}` : x;
     const value = spec.y ? Number(row[spec.y]) : null;
@@ -1278,9 +1357,48 @@ function buildModelChartData(rows, spec) {
       item.value = value;
     }
   });
-  return [...pivoted.values()]
-    .sort((a, b) => compareX(a.x, b.x))
-    .slice(0, 20);
+  const chartData = [...pivoted.values()].sort((a, b) => compareX(a.x, b.x));
+  return (spec.cumulative ? applyCumulative(chartData) : chartData).slice(0, 80);
+}
+
+function formatChartX(spec, rawValue) {
+  if (!spec.timeGrain || spec.timeGrain === "none") {
+    return formatCategoryValue(spec.x, rawValue);
+  }
+  const date = new Date(rawValue);
+  if (Number.isNaN(date.getTime())) return formatCategoryValue(spec.x, rawValue);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  if (spec.timeGrain === "year") return String(year);
+  if (spec.timeGrain === "quarter") return `${year}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`;
+  if (spec.timeGrain === "month") return `${year}-${month}`;
+  if (spec.timeGrain === "week") {
+    const start = new Date(Date.UTC(year, date.getUTCMonth(), date.getUTCDate()));
+    start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+    return `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}-${String(start.getUTCDate()).padStart(2, "0")}`;
+  }
+  return `${year}-${month}-${day}`;
+}
+
+function applyCumulative(data) {
+  const totals = {};
+  return data.map((item) => {
+    const cumulativeItem = { ...item };
+    Object.keys(item)
+      .filter((key) => key !== "x" && key !== "__series" && Number.isFinite(item[key]))
+      .forEach((key) => {
+        totals[key] = round((totals[key] || 0) + item[key]);
+        cumulativeItem[key] = totals[key];
+      });
+    return cumulativeItem;
+  });
+}
+
+function selectRepresentativeRows(rows, limit) {
+  if (rows.length <= limit) return rows;
+  const step = (rows.length - 1) / (limit - 1);
+  return Array.from({ length: limit }, (_, index) => rows[Math.round(index * step)]);
 }
 
 function getSeriesKeys(data, spec) {
@@ -1321,6 +1439,7 @@ function formatCategoryValue(columnName, rawValue) {
 
 function aggregate(values, aggregation) {
   if (!values.length) return 0;
+  if (aggregation === "none") return round(values[0]);
   if (aggregation === "mean") {
     return round(values.reduce((sum, value) => sum + value, 0) / values.length);
   }
