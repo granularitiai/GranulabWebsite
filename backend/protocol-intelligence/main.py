@@ -19,6 +19,12 @@ from document_parser import (
 from llm_extractor import LLMJsonParsingError, OpenAIExtractionError, extract_protocol_intelligence
 from openai_diagnostics import run_openai_diagnostics
 from schemas import CsvExportRequest, HealthResponse, ProtocolIntelligence
+from visualization_intelligence import (
+    DatasetVisualizationRequest,
+    DatasetVisualizationResponse,
+    VisualizationAnalysisError,
+    analyze_visualization_dataset,
+)
 
 
 app = FastAPI(
@@ -97,6 +103,16 @@ async def analyze_clinicaltrials_export(file: UploadFile | None = File(default=N
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     except ClinicalTrialsExportParsingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/analyze/clinical-data-visualization", response_model=DatasetVisualizationResponse)
+def analyze_clinical_data_visualization(
+    request: DatasetVisualizationRequest,
+) -> DatasetVisualizationResponse:
+    try:
+        return analyze_visualization_dataset(request)
+    except VisualizationAnalysisError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/export/csv")

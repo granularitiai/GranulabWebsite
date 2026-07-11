@@ -770,9 +770,11 @@ async function analyzeFile(path, file) {
       method: "POST",
       body: formData,
     });
-  } catch {
+  } catch (err) {
+    const networkMessage =
+      err instanceof Error && err.message ? ` Browser error: ${err.message}` : "";
     throw new Error(
-      `Could not reach the Clinical Trial Intelligence API at ${API_BASE_URL}.`,
+      `Could not reach the Clinical Trial Intelligence API at ${API_BASE_URL}. The backend may be waking up on Render, temporarily unavailable, or blocked by the browser/network.${networkMessage}`,
     );
   }
   if (!response.ok) throw new Error(await readApiError(response));

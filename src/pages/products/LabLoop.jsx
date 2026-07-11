@@ -58,11 +58,7 @@ export default function LabLoop() {
     q: "",
     category: "All",
     state: "",
-    city: "",
-    agency: "",
     auction_status: "",
-    min_relevance: "",
-    min_confidence: "",
     sort: "newest_synced",
   });
 
@@ -335,7 +331,38 @@ function HomeView({ setView, onSync, health, isLoading }) {
 }
 
 function BrowseView({ listings, filters, setFilters, onApplyFilters, isLoading, onSelect, onSeed }) {
-  const states = useMemo(() => [...new Set(listings.map((item) => item.location_state).filter(Boolean))].sort(), [listings]);
+  const stateOptions = useMemo(
+    () => [
+      { value: "", label: "All states" },
+      ...[
+        ...new Set(
+          [
+            filters.state,
+            ...listings.map((item) => item.location_state),
+          ].filter(Boolean),
+        ),
+      ]
+        .sort()
+        .map((state) => ({ value: state, label: state })),
+    ],
+    [filters.state, listings],
+  );
+  const auctionStatusOptions = useMemo(
+    () => [
+      { value: "", label: "All statuses" },
+      ...[
+        ...new Set(
+          [
+            filters.auction_status,
+            ...listings.map((item) => item.auction_status),
+          ].filter(Boolean),
+        ),
+      ]
+        .sort()
+        .map((status) => ({ value: status, label: status })),
+    ],
+    [filters.auction_status, listings],
+  );
 
   function update(key, value) {
     const next = { ...filters, [key]: value };
@@ -359,12 +386,8 @@ function BrowseView({ listings, filters, setFilters, onApplyFilters, isLoading, 
         <div className="grid gap-3 md:grid-cols-4">
           <Input label="Keyword" value={filters.q} onChange={(value) => update("q", value)} placeholder="microscope, freezer..." />
           <Select label="Category" value={filters.category} onChange={(value) => update("category", value)} options={categories} />
-          <Input label="State" value={filters.state} onChange={(value) => update("state", value.toUpperCase())} placeholder={states[0] || "MD"} />
-          <Input label="City" value={filters.city} onChange={(value) => update("city", value)} placeholder="Bethesda" />
-          <Input label="Agency" value={filters.agency} onChange={(value) => update("agency", value)} placeholder="NIH, VA..." />
-          <Input label="Auction Status" value={filters.auction_status} onChange={(value) => update("auction_status", value)} placeholder="Active" />
-          <Input label="Min Relevance" value={filters.min_relevance} onChange={(value) => update("min_relevance", value)} placeholder="70" />
-          <Input label="Min Confidence" value={filters.min_confidence} onChange={(value) => update("min_confidence", value)} placeholder="70" />
+          <Select label="State" value={filters.state} onChange={(value) => update("state", value)} options={stateOptions} />
+          <Select label="Auction Status" value={filters.auction_status} onChange={(value) => update("auction_status", value)} options={auctionStatusOptions} />
           <Select label="Sort" value={filters.sort} onChange={(value) => update("sort", value)} options={sortOptions.map(([value, label]) => ({ value, label }))} />
         </div>
         <div className="mt-4">
@@ -408,7 +431,6 @@ function ListingCard({ listing, onSelect }) {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <Metric label="Relevance" value={`${listing.scientific_relevance_score || 0}%`} />
-          <Metric label="Confidence" value={`${listing.equipment_confidence_score || 0}%`} />
           <Metric label="Current bid" value={money(listing.current_bid)} />
           <Metric label="Bidders" value={listing.bidders_count ?? "N/A"} />
         </div>

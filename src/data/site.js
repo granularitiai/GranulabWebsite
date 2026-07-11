@@ -45,6 +45,12 @@ export const products = [
     description:
       "Discover surplus scientific and lab equipment from GSA Auctions faster.",
   },
+  {
+    name: "Clinical Data Visualization Assistant",
+    href: "/products/clinical-data-visualization",
+    description:
+      "Profile clinical and biotech datasets, generate chart recommendations, and flag quality issues.",
+  },
 ];
 
 export const explorationAreas = [

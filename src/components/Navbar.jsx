@@ -84,7 +84,7 @@ export default function Navbar() {
           </div>
         </div>
       </nav>
-      <div className="mx-auto flex max-w-7xl gap-2 px-5 pb-4 md:hidden">
+      <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-5 pb-4 md:hidden">
         <NavLink to="/" className={navLinkClass}>
           Home
         </NavLink>
@@ -92,7 +92,11 @@ export default function Navbar() {
           About
         </NavLink>
         {products.map((product) => (
-          <NavLink key={product.name} to={product.href} className={navLinkClass}>
+          <NavLink
+            key={product.name}
+            to={product.href}
+            className={(state) => `${navLinkClass(state)} whitespace-nowrap`}
+          >
             {product.name}
           </NavLink>
         ))}

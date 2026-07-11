@@ -17,6 +17,16 @@ VITE_PROTOCOL_API_BASE_URL=https://your-clinical-trial-api.onrender.com
 
 Redeploy the Vercel frontend after changing environment variables.
 
+Current frontend product routes:
+
+```text
+/products/clinical-trial-intelligence-assistant
+/products/labloop
+/products/clinical-data-visualization
+```
+
+The Clinical Data Visualization Assistant is deployed with the Vercel frontend as a native React route. It parses CSV/JSON files in the browser, sends column profiles and capped sample rows to the Protocol Intelligence backend, and renders GPT-selected chart specs with Recharts.
+
 ## LabLoop Backend on Render
 
 This repo includes a Render Blueprint at `render.yaml`.
@@ -50,20 +60,50 @@ CORS_ORIGINS=https://granularitiwebsite.vercel.app,http://localhost:5173,http://
 
 Current note: the Blueprint uses Render's free web service plan and stores SQLite at `/tmp/labloop.db`. That is acceptable for a prototype because LabLoop can re-sync GSA listings, but `/tmp` is not durable production storage. Move LabLoop to Postgres before relying on saved user needs or long-lived listing state.
 
-## Clinical Trial Intelligence Backend
+## Protocol and Visualization Intelligence Backend
 
-That backend currently lives outside this website repo:
+This repo includes the Protocol Intelligence backend in:
 
 ```text
-C:\Users\camer\Documents\Granulariti_proj\clinical_trial_doc_up\clinical-trial-protocol-intelligence\backend
+backend/protocol-intelligence
 ```
 
-Deploy it as a separate Render web service with:
+Service:
 
 ```text
+granulariti-protocol-intelligence-api
+```
+
+Runtime settings:
+
+```text
+Root directory: backend/protocol-intelligence
 Build command: pip install -r requirements.txt
 Start command: uvicorn main:app --host 0.0.0.0 --port $PORT
-Health check path: use the backend's existing health endpoint, if available
+Health check path: /health
 ```
 
-Then set `VITE_PROTOCOL_API_BASE_URL` in Vercel to the Render URL for that service.
+Required Render environment variables:
+
+```text
+OPENAI_API_KEY=<set in Render dashboard>
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_VISUALIZATION_MODEL=gpt-5.5
+OPENAI_TIMEOUT_SECONDS=180
+CORS_ORIGINS=https://granularitiwebsite.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+```
+
+Endpoints served by this backend:
+
+```text
+GET /health
+GET /diagnostics/openai
+POST /analyze/protocol
+POST /analyze/clinicaltrials-export
+POST /analyze/clinical-data-visualization
+POST /export/csv
+```
+
+Then set `VITE_PROTOCOL_API_BASE_URL` in Vercel to the Render URL for this service.
+
+If the OpenAI project does not have access to `gpt-5.5`, set `OPENAI_VISUALIZATION_MODEL` to an enabled model in Render and redeploy the service.
