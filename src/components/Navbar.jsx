@@ -73,8 +73,6 @@ function DesktopDropdown({ label, items, active, openMenu, setOpenMenu }) {
   return (
     <div
       className="relative"
-      onMouseEnter={() => setOpenMenu(label)}
-      onMouseLeave={() => setOpenMenu(null)}
       onBlur={closeWhenFocusLeaves}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
