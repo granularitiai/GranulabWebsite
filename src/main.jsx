@@ -4,6 +4,9 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import App from "./App.jsx";
 import Home from "./pages/Home.jsx";
 import About from "./pages/About.jsx";
+import Contact from "./pages/Contact.jsx";
+import Resources from "./pages/Resources.jsx";
+import ServiceDetail from "./pages/ServiceDetail.jsx";
 import "./styles.css";
 
 const ClinicalTrialIntelligenceAssistant = lazy(() =>
@@ -35,6 +38,9 @@ createRoot(document.getElementById("root")).render(
         <Route path="/" element={<App />}>
           <Route index element={<Home />} />
           <Route path="about" element={<About />} />
+          <Route path="contact" element={<Contact />} />
+          <Route path="resources" element={<Resources />} />
+          <Route path="services/:serviceSlug" element={<ServiceDetail />} />
           <Route
             path="products/clinical-trial-intelligence-assistant"
             element={productPage(ClinicalTrialIntelligenceAssistant)}

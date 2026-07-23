@@ -1,4 +1,12 @@
-import { Instagram, Linkedin, Youtube } from "lucide-react";
+import {
+  BookOpen,
+  Compass,
+  Instagram,
+  Linkedin,
+  Rocket,
+  Wrench,
+  Youtube,
+} from "lucide-react";
 
 export const socialLinks = [
   {
@@ -32,7 +40,7 @@ export const focusAreas = [
   "Workflow Automation",
 ];
 
-export const products = [
+export const solutions = [
   {
     name: "Clinical Trial Intelligence Assistant",
     href: "/products/clinical-trial-intelligence-assistant",
@@ -49,8 +57,67 @@ export const products = [
     name: "Clinical Data Visualization Assistant",
     href: "/products/clinical-data-visualization",
     description:
-      "Profile clinical and biotech datasets, generate chart recommendations, and flag quality issues.",
+      "Ask questions about clinical and biotech datasets and generate AI-planned visualizations.",
   },
+];
+
+// Backward-compatible export for product pages that still use this name.
+export const products = solutions;
+
+export const serviceOfferings = [
+  {
+    slug: "ai-discovery",
+    name: "AI Discovery",
+    href: "/services/ai-discovery",
+    description:
+      "Find the highest-impact AI opportunities in your organization.",
+    duration: "1 week",
+    icon: Compass,
+    deliverables: [
+      "AI opportunity assessment",
+      "Executive recommendations",
+    ],
+  },
+  {
+    slug: "ai-implementation",
+    name: "AI Implementation",
+    href: "/services/ai-implementation",
+    description:
+      "Deploy and customize Granulariti solutions for your team.",
+    icon: Rocket,
+    deliverables: [
+      "Solution configuration",
+      "Workflow integration",
+      "Team enablement",
+    ],
+  },
+  {
+    slug: "custom-solutions",
+    name: "Custom Solutions",
+    href: "/services/custom-solutions",
+    description:
+      "Build tailored AI tools for unique scientific and clinical workflows.",
+    icon: Wrench,
+    deliverables: [
+      "Custom dashboards",
+      "Workflow automation",
+      "Purpose-built AI tools",
+    ],
+  },
+];
+
+export const resourceLinks = [
+  {
+    name: "Resource Hub",
+    href: "/resources",
+    description: "Explore tutorials, build notes, and applied AI resources.",
+    icon: BookOpen,
+  },
+  ...socialLinks.map((link) => ({
+    ...link,
+    description: link.label,
+    external: true,
+  })),
 ];
 
 export const explorationAreas = [
